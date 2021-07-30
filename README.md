@@ -11,6 +11,7 @@ Macro Avellaneda & Sasha Stoikov April 24, 2006
 
 
 <br>
+
 ### Results
 
 ![alt text](https://github.com/nosy0411/HFT_in_a_limit_order_book/blob/main/Simulation(n%20times)%20results%201.png?raw=true)
