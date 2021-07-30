@@ -8,7 +8,7 @@
 \lstset{style=mystyle}
 \setlength\parindent{0pt}
 \begin{document}
-\MakeScribeTop{Market MicroStructure (MM)}{Optimal Execution of Portfolio Transactions}{Robert Almgren and Neil Chriss - December 2000}
+\MakeScribeTop{Market MicroStructure (MM)}{High-frequency trading in a limit order book}{MARCO AVELLANEDA and SASHA STOIKOV*}
 %#############################################################
 %#############################################################
 %#############################################################
@@ -16,276 +16,493 @@
 
 
 
-\section{Introduction} 
+\section{Trading Order Book Dynamics} 
 
-\subsection{Portfolio Liquidation}
-
-\textbf{Financial problem}
+\subsection{Basics of Trading Order Book (TOB)}
 
 \begin{itemize} 
-    \item We want to sell a large quantity of a stock (or of several stocks) in one day.
-    \item How to choose the transaction times?
-\end{itemize}
-
-\subsection{Strategies (1)}
-
-\textbf{Naive strategies}
-
-\begin{itemize} 
-    \item 2 extreme strategies:
-    \begin{itemize} 
-        \item Sell everything right now $\rightarrow$ huge transaction cost since we need to "eat" a lot in the order book. However this cost is known.
-        \item Sell regularly in the day small amounts of assets $\rightarrow$ small transaction costs (volumes are much smaller) but the final profit is unknown because of the daily price fluctuations :
-        Volatility risk.
-    \end{itemize}
-\end{itemize}
-
-\subsection{Strategies (2)}
-
-\textbf{Optimization}
-
-\begin{itemize} 
-    \item We need to optimize between transaction costs and volatility risk.
-    \item To do so, we use the Almgren and Chriss framework which takes into account the market impact phenomenon and emphasizes the importance of having good statistical estimators of market parameters.
-\end{itemize}
-
-\section{Almgren and Chriss model}
-
-\subsection{Trading strategy}
-
-\textbf{Setup}
-
-\begin{itemize} 
-    \item We consider we are selling one asset. We have $X$ shares of this assets at $t_{0}=0$
-    \item We want everything to be sold at $t=T$.
-    \item We split $[0, T]$ into $N$ intervals of length $\tau=T / N$ and set $t_{k}=k \tau, k=0, \ldots, N$
-    \item A trading strategy is a vector $\left(x_{0}, \ldots, x_{N}\right)$, with $x_{k}$ the number of shares we still have at time $t_{k}$.
-    \item $x_{0}=X, x_{N}=0$ and $n_{k}=x_{k-1}-x_{k}$ is the number of assets sold between $t_{k-1}$ and $t_{k}$, decided at time $t_{k-1}$.
-\end{itemize}
-
-\subsection{Price decomposition}
-
-\textbf{Price components}
-
-\begin{itemize} 
-    \item The price we have access to moves because of :
-    \begin{itemize} 
-        \item The drift $\rightarrow$ negligible at the intraday level.
-        \item The volatility.
-        \item The market impact.
-    \end{itemize}
-\end{itemize}
-
-\subsection{Permanent market impact}
-
-\textbf{Permanent impact component}
-
-\begin{itemize} 
-    \item Market participants see us selling large quantities.
-    \item Thus they revise their prices down.
-    \item Therefore, the "equilibrium price" of the asset is modified in permanent way.
-    \item Let $S_{k}$ be the equilibrium price at time $t_{k}$ :
+    \item Buyers/Sellers express their intent to trade by submitting bids/asks
+    \item These are Limit Orders (LO) with a price $P$ and size $N$
+    \item Buy LO $(P, N)$ states willingness to buy $N$ shares at a price $\leq P$
+    \item Sell LO $(P, N)$ states willingness to sell $N$ shares at a price $\geq P$
+    \item Trading Order Book aggregates order sizes for each unique price
+    \item So we can represent with two sorted lists of (Price, Size) pairs
     $$
-    S_{k}=S_{k-1}+\sigma \tau^{1 / 2} \xi_{k}-\tau g\left(n_{k} / \tau\right)
+    \begin{array}{l}
+    \text { Bids: }\left[\left(P_{i}^{(b)}, N_{i}^{(b)}\right) \mid 1 \leq i \leq m\right], P_{i}^{(b)}>P_{j}^{(b)} \text { for } i<j \\
+    \text { Asks: }\left[\left(P_{i}^{(a)}, N_{i}^{(a)}\right) \mid 1 \leq i \leq n\right], P_{i}^{(a)}<P_{j}^{(a)} \text { for } i<j
+    \end{array}
     $$
-    \item with $\xi_{k}$ iid standard Gaussian and $n_{k} / \tau$ the average trading rate between $t_{k-1}$ and $t_{k}$.
+    \item We call $P_{1}^{(b)}$ as simply Bid, $P_{1}^{(a)}$ as $A s k, \frac{P_{1}^{(a)}+P_{1}^{(b)}}{2}$ as $M i d$
+    \item We call $P_{1}^{(a)}-P_{1}^{(b)}$ as Spread, $P_{n}^{(a)}-P_{m}^{(b)}$ as Market Depth
+    \item A Market Order (MO) states intent to buy/sell $N$ shares at the best possible price(s) available on the $\mathrm{TOB}$ at the time of $\mathrm{MO}$ submission
 \end{itemize}
 
-\subsection{Temporary market impact}
-
-\textbf{Temporary impact component}
+\textbf{Trading Order Book (TOB) Activity}
 
 \begin{itemize} 
-    \item It is due to the transaction costs: we are liquidity taker since we "eat" the order book.
-    \item If we sell a large amount of shares, our price per share is significantly worse than when selling only one share.
-    \item We assume this effect is temporary and the liquidity comes back after each period.
-    \item Let $\tilde{S}_{k}=\left(\sum n_{k, i} p_{i}\right) / n_{k}$, with $n_{k, i}$ the number of shares sold at price $p_{i}$ between $t_{k-1}$ and $t_{k} .$ We set
+    \item A new Sell LO $(P, N)$ potentially removes best bid prices on the TOB Removal: 
     $$
-    \tilde{S}_{k}=S_{k-1}-h\left(n_{k} / \tau\right)
+    \left[\left(P_{i}^{(b)}, \min \left(N_{i}^{(b)}, \max \left(0, N-\sum_{j=1}^{i-1} N_{j}^{(b)}\right)\right)\right) \mid\left(i: P_{i}^{(b)} \geq P\right)\right]
     $$
-    \item The term $h\left(n_{k} / \tau\right)$ does not influence the next equilibrium price $S_{k}$.
+    \item After this removal, it adds the following to the asks side of the TOB
+    $$
+    \left(P, \max \left(0, N-\sum_{i: P_{i}^{(b)} \geq P} N_{i}^{(b)}\right)\right)
+    $$
+    \item A new Buy MO operates analogously (on the other side of the TOB)
+    \item A Sell Market Order $N$ will remove the best bid prices on the TOB Removal: 
+    $$
+    \left[\left(P_{i}^{(b)}, \min \left(N_{i}^{(b)}, \max \left(0, N-\sum_{j=1}^{i-1} N_{j}^{(b)}\right)\right)\right) \mid 1 \leq i \leq m\right]
+    $$
+    \item A new Buy MO operates analogously (on the other side of the TOB)
+    \item A Sell Market Order $N$ will remove the best bid prices on the TOB Removal: 
+    $$
+    \left[\left(P_{i}^{(b)}, \min \left(N_{i}^{(b)}, \max \left(0, N-\sum_{j=1}^{i-1} N_{j}^{(b)}\right)\right)\right) \mid 1 \leq i \leq m\right]
+    $$
+    \item A Buy Market Order $N$ will remove the best ask prices on the TOB
+    $$
+    \text { Removal: }\left[\left(P_{i}^{(a)}, \min \left(N_{i}^{(a)}, \max \left(0, N-\sum_{i=1}^{i-1} N_{j}^{(a)}\right)\right)\right) \mid 1 \leq i \leq n\right]
+    $$
+    
 \end{itemize}
 
-\subsection{Profit and Loss}
+\section{Notation for Optimal Market-Making Problem}
 
-\textbf{Cost of trading}
+\textbf{TOB Dynamics and Market-Making}
 
 \begin{itemize} 
-    \item The result of the sell of the asset is
+    \item Modeling TOB Dynamics involves predicting arrival of MOs and LOs
+    \item Market-makers are liquidity providers (providers of Buy and Sell LOs)
+    \item Other market participants are typically diquidity takers (MOs)
+    \item But there are also other market participants that trade with LOs
+    \item Complex interplay between market-makers \& other mkt participants
+    \item Hence, TOB Dynamics tend to be quite complex
+    \item We view the $\mathrm{TOB}$ from the perspective of a single market-maker who aims to gain with Buy/Sell LOs of appropriate width/size
+    \item By anticipating TOB Dynamics \& dynamically adjusting Buy/Sell LOs
+    \item Goal is to maximize Utility of Gains at the end of a suitable horizon
+    \item If Buy/Sell LOs are too narrow, more frequent but small gains
+    \item If Buy/Sell LOs are too wide, less frequent but large gains
+    \item Market-maker also needs to manage potential unfavorable inventory (long or short) buildup and consequent unfavorable liquidation
+\end{itemize}
+
+\textbf{Notation for Optimal Market-Making Problem}
+
+\begin{itemize} 
+    \item We simplify the setting for ease of exposition
+    \item Assume finite time steps indexed by $t=0,1, \ldots, T$
+    \item Denote $W_{t} \in \mathbb{R}$ as Market-maker's trading $\mathrm{PnL}$ at time $t$
+    \item Denote $I_{t} \in \mathbb{Z}$ as Market-maker's inventory of shares at time $t\left(I_{0}=0\right)$
+    \item $S_{t} \in \mathbb{R}^{+}$ is the TOB Mid Price at time $t$ (assume stochastic process)
+    \item $P_{t}^{(b)} \in \mathbb{R}^{+}, N_{t}^{(b)} \in \mathbb{Z}^{+}$ are market maker's Bid Price, Bid Size at time $t$
+    \item $P_{t}^{(a)} \in \mathbb{R}^{+}, N_{t}^{(a)} \in \mathbb{Z}^{+}$ are market-maker's Ask Price, Ask Size at time $t$
+    \item Assume market-maker can add or remove bids/asks costlessly
+    \item Denote $\delta_{t}^{(b)}=S_{t}-P_{t}^{(b)}$ as Bid Spread, $\delta_{t}^{(a)}=P_{t}^{(a)}-S_{t}$ as Ask Spread
+    \item Random $\operatorname{var} X_{t}^{(b)} \in \mathbb{Z}_{\geq 0}$ denotes bid-shares "hit" up to time $t$
+    \item Random var $X_{t}^{(a)} \in \mathbb{Z}_{\geq 0}$ denotes ask-shares "lifted" up to time $t$ $W_{t+1}=W_{t}+P_{t}^{(a)} \cdot\left(X_{t+1}^{(a)}-X_{t}^{(a)}\right)-P_{t}^{(b)} \cdot\left(X_{t+1}^{(b)}-X_{t}^{(b)}\right), I_{t}=X_{t}^{(b)}-X_{t}^{(a)}$
+    \item Goal to maximize $\mathbb{E}\left[U\left(W_{T}+I_{T} \cdot S_{T}\right)\right]$ for appropriate concave $U(\cdot)$
+\end{itemize}
+
+\section{Derivation of Avellaneda-Stoikov Analytical Solution}
+
+\subsection{Avellaneda-Stoikov Continuous Time Formulation}
+
+\begin{itemize} 
+    \item Adapt our discrete-time notation to their continuous-time setting
+    \item $X_{t}^{(b)}, X_{t}^{(a)}$ are Poisson processes with hit/lift-rate means $\lambda_{t}^{(b)}, \lambda_{t}^{(a)}$
+    $$
+    d X_{t}^{(b)} \sim \operatorname{Poisson}\left(\lambda_{t}^{(b)} \cdot d t\right), d X_{t}^{(a)} \sim \operatorname{Poisson}\left(\lambda_{t}^{(a)} \cdot d t\right)
+    $$
+    $\lambda_{t}^{(b)}=f^{(b)}\left(\delta_{t}^{(b)}\right), \lambda_{t}^{(a)}=f^{(a)}\left(\delta_{t}^{(a)}\right)$ for decreasing functions $f^{(b)}, f^{(a)}$
+    $$
+    d W_{t}=P_{t}^{(a)} \cdot d X_{t}^{(a)}-P_{t}^{(b)} \cdot d X_{t}^{(b)}, I_{t}=X_{t}^{(b)}-X_{t}^{(a)}\left(\text { note: } I_{0}=0\right)
+    $$
+    \item Since infinitesimal Poisson random variables $d X_{t}^{(b)}$ (shares hit in time $d t$ ) and $d X_{t}^{(a)}$ (shares lifted in time $d t$ ) are Bernoulli (shares hit/lifted in time $d t$ are 0 or 1$), N_{t}^{(b)}$ and $N_{t}^{(a)}$ can be assumed to be 1
+    \item This simplifies the Action at time $t$ to be just the pair: $\left(\delta_{t}^{(b)}, \delta_{t}^{(a)}\right)$
+    \item TOB Mid Price Dynamics: $d S_{t}=\sigma \cdot d z_{t}$ (scaled brownian motion)
+    \item Utility function $U(x)=-e^{-\gamma x}$ where $\gamma>0$ is coeff. of risk-aversion
+\end{itemize}
+
+
+\subsection{Hamilton-Jacobi-Bellman (HJB) Equation}
+
+\begin{itemize} 
+    \item We denote the Optimal Value function as $V^{*}\left(t, S_{t}, W_{t}, l_{t}\right)$
+    $$
+    V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)=\max _{\delta_{t}^{(b)}, \delta_{t}^{(a)}} \mathbb{E}\left[-e^{-\gamma \cdot\left(W_{T}+l_{t} \cdot S_{T}\right)}\right]
+    $$
+    \item $V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)$ satisfies a recursive formulation for $0 \leq t<t_{1}<T$ :
+    $$
+    V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)=\max _{\delta_{t}^{(b)}, \delta_{t}^{(a)}} \mathbb{E}\left[V^{*}\left(t_{1}, S_{t_{1}}, W_{t_{1}}, l_{t_{1}}\right)\right]
+    $$
+    \item Rewriting in stochastic differential form, we have the HJB Equation
     $$
     \begin{array}{c}
-    \sum_{k=1}^{N} n_{k} \tilde{S}_{k} \\
-    =X S_{0}+\sum_{k=1}^{N}\left(\sigma \tau^{1 / 2} \xi_{k}-\tau g\left(n_{k} / \tau\right)\right) x_{k}-\sum_{k=1}^{N} n_{k} h\left(n_{k} / \tau\right)
+    \max _{\delta_{t}^{(b)}, \delta_{t}^{(a)}} \mathbb{E}\left[d V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)\right]=0 \text { for } t<T \\
+    V^{*}\left(T, S_{T}, W_{T}, I_{T}\right)=-e^{-\gamma \cdot\left(W_{T}+I_{T} \cdot S_{T}\right)}
     \end{array}
     $$
-    \item The trading cost $\mathcal{C}=X S_{0}-\sum_{k=1}^{N} n_{k} \tilde{S}_{k}$ is equal to
-    Vol. cost $+$ Perm. Impact cost $+$ Temp. Impact cost.
 \end{itemize}
 
-\subsection{Mean-Variance analysis}
-
-\textbf{Moments}
+\subsection{Converting HJB to a Partial Dierential Equation}
 
 \begin{itemize} 
-    \item Consider a static strategy (fully known in $\left.t_{0}\right)$, which is in fact optimal in this framework. We have
+    \item Change to $V^{*}\left(t, S_{t}, W_{t}, l_{t}\right)$ is comprised of 3 components:
+    \begin{itemize} 
+        \item Due to pure movement in time $t$
+        \item Due to randomness in TOB Mid-Price $S_{t}$
+        \item Due to randomness in hitting/lifting the Bid/Ask
+    \end{itemize}
+    \item With this, we can expand $d V^{*}\left(t, S_{t}, W_{t}, l_{t}\right)$ and rewrite HJB as:
     $$
-    \mathbb{E}[\mathcal{C}]=\sum_{k=1}^{N} \tau x_{k} g\left(n_{k} / \tau\right)+\sum_{k=1}^{N} n_{k} h\left(n_{k} / \tau\right), \quad \operatorname{Var}[\mathcal{C}]=\sigma^{2} \sum_{k=1}^{N} \tau x_{k}^{2}
-    $$
-    \item In order to build optimal trading trajectories, we will look for strategies minimizing
-    $$
-    \mathbb{E}[\mathcal{C}]+\lambda \operatorname{Var}[\mathcal{C}]
-    $$
-    with $\lambda$ a risk aversion parameter.
-\end{itemize}
-
-\section{Naive strategies}
-
-\subsection{Assumptions (1)}
-
-\textbf{Permanent impact}
-
-\begin{itemize} 
-    \item Linear permanent impact: $g(v)=\gamma v$.
-    \item If we sell $n$ shares, the price per share decreases by $\gamma n .$ Thus
-    $$
-    S_{k}=S_{0}+\sigma \sum_{j=1}^{k} \tau^{1 / 2} \xi_{j}-\gamma\left(X-x_{k}\right)
-    $$
-    \item and in $\mathbb{E}[\mathcal{C}]$, the permanent impact component satisfies
-    $$
-    \sum_{k=1}^{N} \tau x_{k} g\left(n_{k} / \tau\right)=\gamma \sum_{k=1}^{N} x_{k}\left(x_{k-1}-x_{k}\right)=\frac{1}{2} \gamma X^{2}-\frac{1}{2} \gamma \sum_{k=1}^{N} n_{k}^{2}
+    \begin{aligned}
+    \max _{\delta_{t}^{(b)}, \delta_{t}^{(a)}}\{& \frac{\partial V^{*}}{\partial t} d t+\mathbb{E}\left[\sigma \frac{\partial V^{*}}{\partial S_{t}} d z_{t}+\frac{\sigma^{2}}{2} \frac{\partial^{2} V^{*}}{\partial S_{t}^{2}}\left(d z_{t}\right)^{2}\right] \\
+    &+\lambda_{t}^{(b)} \cdot d t \cdot V^{*}\left(t, S_{t}, W_{t}-S_{t}+\delta_{t}^{(b)}, I_{t}+1\right) \\
+    &+\lambda_{t}^{(a)} \cdot d t \cdot V^{*}\left(t, S_{t}, W_{t}+S_{t}+\delta_{t}^{(a)}, I_{t}-1\right) \\
+    &+\left(1-\lambda_{t}^{(b)} \cdot d t-\lambda_{t}^{(a)} \cdot d t\right) \cdot V^{*}\left(t, S_{t}, W_{t}, l_{t}\right) \\
+    &\left.-V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)\right\}=0
+    \end{aligned}
     $$
 \end{itemize}
 
-\subsection{Assumptions (2)}
-
-\textbf{Temporary impact}
-
 \begin{itemize} 
-    \item Affine temporary impact: $h\left(n_{k} / \tau\right)=\varepsilon+\eta\left(n_{k} / \tau\right)$.
-    \item $\varepsilon$ represents a fixed cost : fees $+$ bid ask spread.
-    \item Let $\tilde{\eta}=\eta-\frac{1}{2} \gamma \tau$, we get
+    \item We can simplify this equation with a few observations:
+    \begin{itemize} 
+        \item $\mathbb{E}\left[d z_{t}\right]=0$
+        \item $\mathbb{E}\left[\left(d z_{t}\right)^{2}\right]=d t$
+        \item Organize the terms involving $\lambda_{t}^{(b)}$ and $\lambda_{t}^{(a)}$ better with some algebra
+        \item Divide throughout by $dt$
+    \end{itemize}
     $$
-    \mathbb{E}[\mathcal{C}]=\frac{1}{2} \gamma X^{2}+\varepsilon X+\frac{\tilde{\eta}}{\tau} \sum_{k=1}^{N} n_{k}^{2}
+    \begin{aligned} \max _{\delta_{t}^{(b)}, \delta_{t}^{(a)}}\{& \frac{\partial V^{*}}{\partial t}+\frac{\sigma^{2}}{2} \frac{\partial^{2} V^{*}}{\partial S_{t}^{2}} \\ &+\lambda_{t}^{(b)} \cdot\left(V^{*}\left(t, S_{t}, W_{t}-S_{t}+\delta_{t}^{(b)}, I_{t}+1\right)-V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)\right) \\ & \left.+\lambda_{t}^{(a)} \cdot\left(V^{*}\left(t, S_{t}, W_{t}+S_{t}+\delta_{t}^{(a)}, I_{t}-1\right)-V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)\right)\right\}=0 \end{aligned}
     $$
 \end{itemize}
 
-\subsection{Regular liquidation}
-
-\textbf{Regular strategy}
+\begin{itemize} 
+    \item Next, note that $\lambda_{t}^{(b)}=f^{(b)}\left(\delta_{t}^{(b)}\right)$ and $\lambda_{t}^{(a)}=f^{(a)}\left(\delta_{t}^{(a)}\right)$, and apply the max
+    only on the relevant terms
+    $$
+    \frac{\partial V^{*}}{\partial t}+\frac{\sigma^{2}}{2} \frac{\partial^{2} V^{*}}{\partial S_{t}^{2}}
+    $$
+    $$
+    +\max _{\delta_{t}^{(b)}}\left\{f^{(b)}\left(\delta_{t}^{(b)}\right) \cdot\left(V^{*}\left(t, S_{t}, W_{t}-S_{t}+\delta_{t}^{(b)}, l_{t}+1\right)-V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)\right)\right\}\\
+    $$
+    $$
+    +\max _{\delta_{t}^{(a)}}\left\{f^{(a)}\left(\delta_{t}^{(a)}\right) \cdot\left(V^{*}\left(t, S_{t}, W_{t}+S_{t}+\delta_{t}^{(a)}, I_{t}-1\right)-V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)\right)\right\}=0\\
+    $$
+    \item This combines with the boundary condition:
+    $$
+    V^{*}\left(T, S_{T}, W_{T}, I_{T}\right)=-e^{-\gamma \cdot\left(W_{T}+I_{T} \cdot S_{T}\right)}
+    $$
+\end{itemize}
 
 \begin{itemize} 
-    \item Take $n_{k}=X / N, x_{k}=(N-k) X / N, k=1, \ldots, N$.
-    \item We easily get
+    \item We make an "educated guess" for the structure of $V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)$
+    \[
+    V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)=-e^{-\gamma\left(W_{t}+\theta\left(t, S_{t}, I_{t}\right)\right)} \tag{1}
+    \]
+    and reduce the problem to a PDE in terms of $\theta\left(t, S_{t}, l_{t}\right)$
+    \item Substituting this into the above PDE for $V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)$ gives:
     $$
     \begin{array}{l}
-    \mathbb{E}[\mathcal{C}]=\frac{1}{2} \gamma X^{2}+\varepsilon X+\tilde{\eta} \frac{X^{2}}{T} \\
-    \operatorname{Var}[\mathcal{C}]=\frac{\sigma^{2}}{3} X^{2} T\left(1-\frac{1}{N}\right)\left(1-\frac{1}{2 N}\right) .
+    \frac{\partial \theta}{\partial t}+\frac{\sigma^{2}}{2}\left(\frac{\partial^{2} \theta}{\partial S_{t}^{2}}-\gamma\left(\frac{\partial \theta}{\partial S_{t}}\right)^{2}\right) \\
+    +\underset{\delta_{t}^{(b)}}{\max }\left\{\frac{f^{(b)}\left(\delta_{t}^{(b)}\right)}{\gamma} \cdot\left(1-e^{-\gamma\left(\delta_{t}^{(b)}-S_{t}+\theta\left(t, S_{t}, l_{t}+1\right)-\theta\left(t, S_{t}, I_{t}\right)\right)}\right)\right\} \\
+    \left.+\max _{\left.\delta_{t}^{(a)}\right)} \frac{f^{(a)}\left(\delta_{t}^{(a)}\right)}{\gamma} \cdot\left(1-e^{-\gamma\left(\delta_{t}^{(a)}+S_{t}+\theta\left(t, S_{t}, I_{t}-1\right)-\theta\left(t, S_{t}, I_{t}\right)\right)}\right)\right\}=0
     \end{array}
     $$
-    \item We can show this strategy has the smallest expectation. However the variance can be very big if $T$ is large.
+    \item The boundary condition is:
+    $$
+    \theta\left(T, S_{T}, I_{T}\right)=I_{T} \cdot S_{T}
+    $$
 \end{itemize}
 
-\subsection{Immediate selling}
-
-\textbf{Selling everything at t0}
+\subsection{Indifference Bid/Ask Price}
 
 \begin{itemize} 
-    \item Take $n_{1}=X, n_{2}=\ldots=n_{N}=0, x_{1}=\ldots=x_{N}=0$
-    \item We get
+    \item It turns out that $\theta\left(t, S_{t}, I_{t}+1\right)-\theta\left(t, S_{t}, I_{t}\right)$ and $\theta\left(t, S_{t}, I_{t}\right)-\theta\left(t, S_{t}, l_{t}-1\right)$ are equal to financially meaningful quantities known as Indifference Bid and Ask Prices
+    \item Indifference Bid Price $Q^{(b)}\left(t, S_{t}, I_{t}\right)$ is defined as:
+    \[
+    V^{*}\left(t, S_{t}, W_{t}-Q^{(b)}\left(t, S_{t}, I_{t}\right), I_{t}+1\right)=V^{*}\left(t, S_{t}, W_{t}, l_{t}\right) \tag{2}
+    \]
+    \item $Q^{(b)}\left(t, S_{t}, l_{t}\right)$ is the price to buy a share with guarantee of immediate purchase that results in Optimum Expected Utility being unchanged
+    \item Likewise, Indifference Ask Price $Q^{(a)}\left(t, S_{t}, I_{t}\right)$ is defined as:
+    \[
+    V^{*}\left(t, S_{t}, W_{t}+Q^{(a)}\left(t, S_{t}, I_{t}\right), I_{t}-1\right)=V^{*}\left(t, S_{t}, W_{t}, I_{t}\right) \tag{3}
+    \]
+    \item $Q^{(a)}\left(t, S_{t}, l_{t}\right)$ is the price to sell a share with guarantee of immediate sale that results in Optimum Expected Utility being unchanged
+    \item We abbreviate $Q^{(b)}\left(t, S_{t}, I_{t}\right)$ as $Q_{t}^{(b)}$ and $Q^{(a)}\left(t, S_{t}, I_{t}\right)$ as $Q_{t}^{(a)}$
+\end{itemize}
+
+\textbf{Indifference Bid/Ask Price in the PDE for $\theta$}
+
+\begin{itemize} 
+    \item Express $V^{*}\left(t, S_{t}, W_{t}-Q_{t}^{(b)}, l_{t}+1\right)=V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)$ in terms of $\theta$ :
+    \[
+    \begin{array}{c}
+    -e^{-\gamma\left(W_{t}-Q_{t}^{(b)}+\theta\left(t, S_{t}, l_{t}+1\right)\right)}=-e^{-\gamma\left(W_{t}+\theta\left(t, S_{t}, I_{t}\right)\right)} \\
+    \Rightarrow Q_{t}^{(b)}=\theta\left(t, S_{t}, l_{t}+1\right)-\theta\left(t, S_{t}, l_{t}\right)
+    \end{array} \tag{4}
+    \]
+    \item Likewise for $Q_{t}^{(a)}$, we get:
+    \[
+    Q_{t}^{(a)}=\theta\left(t, S_{t}, I_{t}\right)-\theta\left(t, S_{t}, I_{t}-1\right) \tag{5}
+    \]
+    \item Using equations (4) and (5), bring $Q_{t}^{(b)}$ and $Q_{t}^{(a)}$ in the PDE for $\theta$
+    $$
+    \begin{array}{c}
+    \frac{\partial \theta}{\partial t}+\frac{\sigma^{2}}{2}\left(\frac{\partial^{2} \theta}{\partial S_{t}^{2}}-\gamma\left(\frac{\partial \theta}{\partial S_{t}}\right)^{2}\right)+\max _{\delta_{t}^{(b)}} g\left(\delta_{t}^{(b)}\right)+\max _{\delta_{t}^{(a)}} h\left(\delta_{t}^{(b)}\right)=0 \\
+    \text { where } g\left(\delta_{t}^{(b)}\right)=\frac{f^{(b)}\left(\delta_{t}^{(b)}\right)}{\gamma} \cdot\left(1-e^{-\gamma\left(\delta_{t}^{(b)}-S_{t}+Q_{t}^{(b)}\right)}\right) \\
+    \text { and } h\left(\delta_{t}^{(a)}\right)=\frac{f^{(a)}\left(\delta_{t}^{(a)}\right)}{\gamma} \cdot\left(1-e^{-\gamma\left(\delta_{t}^{(a)}+S_{t}-Q_{t}^{(a)}\right)}\right)
+    \end{array}
+    $$
+\end{itemize}
+
+\subsection{Optimal Bid Spread and Optimal Ask Spread}
+
+\begin{itemize} 
+    \item To maximize $g\left(\delta_{t}^{(b)}\right)$, differentiate $g$ with respect to $\delta_{t}^{(b)}$ and set to 0
+    \[
+    \begin{array}{c}
+    e^{-\gamma\left(\delta_{t}^{(b)^{*}}-S_{t}+Q_{t}^{(b)}\right)} \cdot\left(\gamma \cdot f^{(b)}\left(\delta_{t}^{(b)^{*}}\right)-\frac{\partial f^{(b)}}{\partial \delta_{t}^{(b)}}\left(\delta_{t}^{(b)^{*}}\right)\right)+\frac{\partial f^{(b)}}{\partial \delta_{t}^{(b)}}\left(\delta_{t}^{(b)^{*}}\right)=0 \\
+    \Rightarrow \delta_{t}^{(b)^{*}}=S_{t}-Q_{t}^{(b)}+\frac{1}{\gamma} \cdot \ln \left(1-\gamma \cdot \frac{f^{(b)}\left(\delta_{t}^{(b)^{*}}\right)}{\frac{\partial f^{(b)}}{\partial \delta_{t}^{(b)}}\left(\delta_{t}^{(b)^{*}}\right)}\right)
+    \end{array} \tag{6}
+    \]
+    \item To maximize $g\left(\delta_{t}^{(a)}\right)$, differentiate $g$ with respect to $\delta_{t}^{(a)}$ and set to 0
+    \[
+    \begin{array}{c}
+    e^{-\gamma\left(\delta_{t}^{(a)^{*}}+S_{t}-Q_{t}^{(a)}\right)} \cdot\left(\gamma \cdot f^{(a)}\left(\delta_{t}^{(a)^{*}}\right)-\frac{\partial f^{(a)}}{\partial \delta_{t}^{(a)}}\left(\delta_{t}^{(a)^{*}}\right)\right)+\frac{\partial f^{(a)}}{\partial \delta_{t}^{(a)}}\left(\delta_{t}^{(a)^{*}}\right)=0 \\
+    \Rightarrow \delta_{t}^{(a)^{*}}=Q_{t}^{(a)}-S_{t}+\frac{1}{\gamma} \cdot \ln \left(1-\gamma \cdot \frac{f^{(a)}\left(\delta_{t}^{(a)^{*}}\right)}{\frac{\partial f^{(a)}}{\partial \delta_{t}^{(a)}}\left(\delta_{t}^{(a)^{*}}\right)}\right)
+    \end{array} \tag{7}
+    \]
+    \item (6) and (7) are implicit equations for $\delta_{t}^{(b)^{*}}$ and $\delta_{t}^{(a)^{*}}$ respectively
+\end{itemize}
+
+\textbf{Solving for $\theta$ and for Optimal Bid/Ask Spreads}
+
+\begin{itemize} 
+    \item Let us write the PDE in terms of the Optimal Bid and Ask Spreads
+    \[
+    \begin{array}{l}
+    \frac{\partial \theta}{\partial t}+\frac{\sigma^{2}}{2}\left(\frac{\partial^{2} \theta}{\partial S_{t}^{2}}-\gamma\left(\frac{\partial \theta}{\partial S_{t}}\right)^{2}\right) \\
+    +\frac{f^{(b)}\left(\delta_{t}^{(b)^{*}}\right)}{\gamma} \cdot\left(1-e^{-\gamma\left(\delta_{t}^{(b)^{*}}-S_{t}+\theta\left(t, S_{t}, I_{t}+1\right)-\theta\left(t, S_{t}, l_{t}\right)\right)}\right) \\
+    +\frac{f^{(a)}\left(\delta_{t}^{(a)^{*}}\right)}{\gamma} \cdot\left(1-e^{-\gamma\left(\delta_{t}^{(a)^{*}}+S_{t}+\theta\left(t, S_{t}, I_{t}-1\right)-\theta\left(t, S_{t}, I_{t}\right)\right)}\right)=0
+    \end{array} \tag{8}
+    \]
+    \item with boundary condition $\theta\left(T, S_{T}, I_{T}\right)=I_{T} \cdot S_{T}$
+    \item First we solve PDE (8) for $\theta$ in terms of $\delta_{t}^{(b)^{*}}$ and $\delta_{t}^{(a)^{*}}$
+    \item In general, this would be a numerical PDE solution
+    \item Using (4) and (5), we have $Q_{t}^{(b)}$ and $Q_{t}^{(a)}$ in terms of $\delta_{t}^{(b)^{*}}$ and $\delta_{t}^{(a)^{*}}$
+    \item Substitute above-obtained $Q_{t}^{(b)}$ and $Q_{t}^{(a)}$ in equations (6) and (7)
+    \item Solve implicit equations for $\delta_{t}^{(b)^{*}}$ and $\delta_{t}^{(a)^{*}}$ (in general, numerically)
+\end{itemize}
+
+\textbf{Building Intuition}
+
+\begin{itemize} 
+    \item Define Indifference Mid Price $Q_{t}^{(m)}=\frac{Q_{t}^{(b)}+Q_{t}^{(a)}}{2}$
+    \item To develop intuition for Indifference Prices, consider a simple case where the market-maker doesn't supply any bids or asks
+    $$
+    V^{*}\left(t, S_{t}, W_{t}, l_{t}\right)=\mathbb{E}\left[-e^{-\gamma\left(W_{t}+l_{t} \cdot S_{T}\right)} \mid\right]
+    $$
+    \item Combining this with the diffusion $d S_{t}=\sigma \cdot d z_{t}$, we get:
+    $$
+    V^{*}\left(t, S_{t}, W_{t}, I_{t}\right)=-e^{-\gamma\left(W_{t}+l_{t} \cdot S_{t}-\frac{\gamma \cdot l_{t}^{2} \cdot \sigma^{2}(T-t)}{2}\right)}
+    $$
+    \item Combining this with equations $(2)$ and $(3)$, we get:
+    $$
+    \begin{array}{c}
+    Q_{t}^{(b)}=S_{t}-\left(2 I_{t}+1\right) \frac{\gamma \sigma^{2}(T-t)}{2}, Q_{t}^{(a)}=S_{t}-\left(2 l_{t}-1\right) \frac{\gamma \sigma^{2}(T-t)}{2} \\
+    Q_{t}^{(m)}=S_{t}-I_{t} \gamma \sigma^{2}(T-t), Q_{t}^{(a)}-Q_{t}^{(b)}=\gamma \sigma^{2}(T-t)
+    \end{array}
+    $$
+    \item These results for the simple case of no-market-making serve as approximations for our problem of optimal market-making
+\end{itemize}
+
+\begin{itemize} 
+    \item Think of $Q_{t}^{(m)}$ as inventory-risk-adjusted mid-price (adjustment to $\left.S_{t}\right)$
+    \item If market-maker is long inventory $\left(I_{t}>0\right), Q_{t}^{(m)}<S_{t}$ indicating inclination to sell than buy, and if market-maker is short inventory, $Q_{t}^{(m)}>S_{t}$ indicating inclination to buy than sell
+    \item Armed with this intuition, we come back to optimal market-making, observing from eqns $(6)$ and $(7): P_{t}^{(b)^{*}}<Q_{t}^{(b)}<Q_{t}^{(m)}<Q_{t}^{(a)}<P_{t}^{(a)^{*}}$
+    \item Think of $\left[P_{t}^{(b)^{*}}, P_{t}^{(a)^{*}}\right]$ as "centered" at $Q_{t}^{(m)}$ (rather than at $\left.S_{t}\right)$,
+    i.e., $\left[P_{t}^{(b)^{*}}, P_{t}^{(a)^{*}}\right]$ will (together) move up/down in tandem with $Q_{t}^{(m)}$ moving up/down (as a function of inventory position $\left.I_{t}\right)$
+    \[
+    \begin{array}{c}
+    Q_{t}^{(m)}-P_{t}^{(b)^{*}}=\frac{Q_{t}^{(a)}-Q_{t}^{(b)}}{2}+\frac{1}{\gamma} \cdot \ln \left(1-\gamma \cdot \frac{f^{(b)}\left(\delta_{t}^{(b)^{*}}\right)}{\frac{\partial f^{(b)}}{\partial \delta_{t}^{(b)}}\left(\delta_{t}^{(b)^{*}}\right)}\right) \tag{9,10}\\
+    P_{t}^{(a)^{*}}-Q_{t}^{(m)}=\frac{Q_{t}^{(a)}-Q_{t}^{(b)}}{2}+\frac{1}{\gamma} \cdot \ln \left(1-\gamma \cdot \frac{f^{(a)}\left(\delta_{t}^{(a)^{*}}\right)}{\frac{\partial f(a)}{\partial \delta_{t}^{(a)}}\left(\delta_{t}^{(a)^{*}}\right)}\right)
+    \end{array} 
+    \]
+\end{itemize}
+
+\subsection{Simple Functional Form for Hitting/Lifting Rate Means}
+
+\begin{itemize} 
+    \item The PDE for $\theta$ and the implicit equations for $\delta_{t}^{(b)^{*}}, \delta_{t}^{(a)^{*}}$ are messy
+    \item We make some assumptions, simplify, derive analytical approximations
+    \item First we assume a fairly standard functional form for $f^{(b)}$ and $f^{(a)}$
+    $$
+    f^{(b)}(\delta)=f^{(a)}(\delta)=c \cdot e^{-k \cdot \delta}
+    $$
+    \item This reduces equations $(6)$ and $(7)$ to:
+    \[
+    \begin{array}{l}
+    \delta_{t}^{(b)^{*}}=S_{t}-Q_{t}^{(b)}+\frac{1}{\gamma} \ln \left(1+\frac{\gamma}{k}\right) \tag{11,12} \\
+    \delta_{t}^{(a)^{*}}=Q_{t}^{(a)}-S_{t}+\frac{1}{\gamma} \ln \left(1+\frac{\gamma}{k}\right)
+    \end{array}
+    \]
+    $$
+    \Rightarrow P_{t}^{(b)^{*}} and P_{t}^{(a)^{*}} are\, equidistant\, from\, Q_{t}^{(m)}
+    $$
+    \item Substituting these simplified $\delta_{t}^{(b)^{*}}, \delta_{t}^{(a)^{*}}$ in (8) reduces the PDE to:
+    \[
+    \frac{\partial \theta}{\partial t}+\frac{\sigma^{2}}{2}\left(\frac{\partial^{2} \theta}{\partial S_{t}^{2}}-\gamma\left(\frac{\partial \theta}{\partial S_{t}}\right)^{2}\right)+\frac{c}{k+\gamma}\left(e^{-k \cdot \delta_{t}^{(b)^{*}}}+e^{-k \cdot \delta_{t}^{(a)^{*}}}\right)=0 \tag{13}
+    \]
+    \item with boundary condition $\theta\left(T, S_{T}, I_{T}\right)=I_{T} \cdot S_{T}$
+\end{itemize}
+
+\subsection{Simplifying the PDE with Approximations}
+
+\begin{itemize} 
+    \item Note that this PDE (13) involves $\delta_{t}^{(b)^{*}}$ and $\delta_{t}^{(a)^{*}}$
+    \item However, equations $(11),(12),(4),(5)$ enable expressing $\delta_{t}^{(b)^{*}}$ and $\delta_{t}^{(a)^{*}}$ in terms of $\theta\left(t, S_{t}, I_{t}-1\right), \theta\left(t, S_{t}, I_{t}\right), \theta\left(t, S_{t}, I_{t}+1\right)$
+    \item This would give us a PDE just in terms of $\theta$
+    \item Solving that PDE for $\theta$ would not only give us $V^{*}\left(t, S_{t}, W_{t}, l_{t}\right)$ but also $\delta_{t}^{(b)^{*}}$ and $\delta_{t}^{(a)^{*}}$ (using equations $\left.(11),(12),(4),(5)\right)$
+    \item To solve the PDE, we need to make a couple of approximations
+    \item First we make a linear approx for $e^{-k \cdot \delta_{t}^{(b)^{*}}}$ and $e^{-k \cdot \delta_{t}^{(a)^{*}}}$ in PDE (13):
+    \[
+    \frac{\partial \theta}{\partial t}+\frac{\sigma^{2}}{2}\left(\frac{\partial^{2} \theta}{\partial S_{t}^{2}}-\gamma\left(\frac{\partial \theta}{\partial S_{t}}\right)^{2}\right)+\frac{c}{k+\gamma}\left(1-k \cdot \delta_{t}^{(b)^{*}}+1-k \cdot \delta_{t}^{(a)^{*}}\right)=0 \tag{14}
+    \]
+    \item Equations $(11),(12),(4),(5)$ tell us that:
+    $$
+    \delta_{t}^{(b)^{*}}+\delta_{t}^{(a)^{*}}=\frac{2}{\gamma} \ln \left(1+\frac{\gamma}{k}\right)+2 \theta\left(t, S_{t}, I_{t}\right)-\theta\left(t, S_{t}, I_{t}+1\right)-\theta\left(t, S_{t}, I_{t}-1\right)
+    $$
+\end{itemize}
+
+
+
+\subsection{Asymptotic Expansion of $\theta$ in $I_{t}$}
+
+\begin{itemize} 
+    \item With this expression for $\delta_{t}^{(b)^{*}}+\delta_{t}^{(a)^{*}}$, PDE (14) takes the form:
+    \[
+    \begin{aligned}
+    \frac{\partial \theta}{\partial t}+\frac{\sigma^{2}}{2} &\left(\frac{\partial^{2} \theta}{\partial S_{t}^{2}}-\gamma\left(\frac{\partial \theta}{\partial S_{t}}\right)^{2}\right)+\frac{c}{k+\gamma}\left(2-\frac{2 k}{\gamma} \ln \left(1+\frac{\gamma}{k}\right)\right.\\
+    &\left.-k\left(2 \theta\left(t, S_{t}, I_{t}\right)-\theta\left(t, S_{t}, l_{t}+1\right)-\theta\left(t, S_{t}, I_{t}-1\right)\right)\right)=0
+    \end{aligned} \tag{15}
+    \]
+    \item To solve PDE (15), we consider this asymptotic expansion of $\theta$ in $I_{t}$ :
+    $$
+    \theta\left(t, S_{t}, I_{t}\right)=\sum_{n=0}^{\infty} \frac{l_{t}^{n}}{n !} \cdot \theta^{(n)}\left(t, S_{t}\right)
+    $$
+    \item So we need to determine the functions $\theta^{(n)}\left(t, S_{t}\right)$ for all $n=0,1,2, \ldots$
+    \item For tractability, we approximate this expansion to the first 3 terms:
+    $$
+    \theta\left(t, S_{t}, I_{t}\right) \approx \theta^{(0)}\left(t, S_{t}\right)+I_{t} \cdot \theta^{(1)}\left(t, S_{t}\right)+\frac{I_{t}^{2}}{2} \cdot \theta^{(2)}\left(t, S_{t}\right)
+    $$
+\end{itemize}
+
+\subsection{Approximation of $\theta$ in $I_{t}$}
+
+\begin{itemize} 
+    \item We note that the Optimal Value Function $V^{*}$ can depend on $S_{t}$ only through the current Value of the Inventory (i.e., through $\left.I_{t} \cdot S_{t}\right)$, i.e., it cannot depend on $S_{t}$ in any other way
+    \item This means $V^{*}\left(t, S_{t}, W_{t}, 0\right)=-e^{-\gamma\left(W_{t}+\theta^{(0)}\left(t, S_{t}\right)\right)}$ is independent of $S_{t}$
+    \item This means $\theta^{(0)}\left(t, S_{t}\right)$ is independent of $S_{t}$
+    \item So, we can write it as simply $\theta^{(0)}(t)$, meaning $\frac{\partial \theta^{(0)}}{\partial S_{t}}$ and $\frac{\partial^{2} \theta^{(0)}}{\partial S_{t}^{2}}$ are 0
+    \item Therefore, we can write the approximate expansion for $\theta\left(t, S_{t}, I_{t}\right)$ as:
+    \[
+    \theta\left(t, S_{t}, I_{t}\right)=\theta^{(0)}(t)+I_{t} \cdot \theta^{(1)}\left(t, S_{t}\right)+\frac{I_{t}^{2}}{2} \cdot \theta^{(2)}\left(t, S_{t}\right) \tag{16}
+    \]
+\end{itemize}
+
+\subsection{Solving the PDE}
+
+\begin{itemize} 
+    \item Substitute this approximation (16) for $\theta\left(t, S_{t}, I_{t}\right)$ in PDE (15)
     $$
     \begin{array}{l}
-    \mathbb{E}[\mathcal{C}]=\varepsilon X+\frac{\eta X^{2}}{\tau} \\
-    \operatorname{Var}[\mathcal{C}]=0
+    \frac{\partial \theta^{(0)}}{\partial t}+I_{t} \frac{\partial \theta^{(1)}}{\partial t}+\frac{l_{t}^{2}}{2} \frac{\partial \theta^{(2)}}{\partial t}+\frac{\sigma^{2}}{2}\left(I_{t} \frac{\partial^{2} \theta^{(1)}}{\partial S_{t}^{2}}+\frac{l_{t}^{2}}{2} \frac{\partial^{2} \theta^{(2)}}{\partial S_{t}^{2}}\right) \\
+    -\frac{\gamma \sigma^{2}}{2}\left(I_{t} \frac{\partial \theta^{(1)}}{\partial S_{t}}+\frac{l_{t}^{2}}{2} \frac{\partial \theta^{(2)}}{\partial S_{t}}\right)^{2}+\frac{c}{k+\gamma}\left(2-\frac{2 k}{\gamma} \ln \left(1+\frac{\gamma}{k}\right)+k \cdot \theta^{(2)}\right)=0
     \end{array}
     $$
-    \item This strategy has the smallest variance. However, if $\tau$ is small, the expectation can be very large.
+    \item with boundary condition:
+    \[
+    \theta^{(0)}(T)+I_{T} \cdot \theta^{(1)}\left(T, S_{T}\right)+\frac{I_{T}^{2}}{2} \cdot \theta^{(2)}\left(T, S_{T}\right)=I_{T} \cdot S_{T} \tag{17}
+    \]
+    \item We will separately collect terms involving specific powers of $I_{t}$, each yielding a separate PDE:
+    \begin{itemize} 
+        \item Terms devoid of $I_{t}$ (i.e., $\left.I_{t}^{0}\right)$
+        \item Terms involving $I_{t}$ (i.e., $I_{t}^{1}$ )
+        \item Terms involving $I_{t}^{2}$
+    \end{itemize}
 \end{itemize}
 
-\section{Optimal strategies}
-
-\subsection{Optimization (1)}
-
-\textbf{Optimization program}
-
 \begin{itemize} 
-    \item - The trader wants to minimize
+    \item We start by collecting terms involving $I_{t}$
     $$
-    U(\mathcal{C})=\mathbb{E}[\mathcal{C}]+\lambda \operatorname{Var}[\mathcal{C}] .
+    \frac{\partial \theta^{(1)}}{\partial t}+\frac{\sigma^{2}}{2} \cdot \frac{\partial^{2} \theta^{(1)}}{\partial S_{t}^{2}}=0 with\, boundary\, condition\, \theta^{(1)}\left(T, S_{T}\right)=S_{T}
     $$
-    \item $U(\mathcal{C})$ is equal to
+    \item The solution to this PDE is:
+    \[
+    \theta^{(1)}\left(t, S_{t}\right)=S_{t} \tag{18}
+    \]
+    \item Next, we collect terms involving $l_{t}^{2}$
     $$
-    \frac{1}{2} \gamma X^{2}+\varepsilon X+\frac{\tilde{\eta}}{\tau} \sum_{k=1}^{N}\left(x_{k-1}-x_{k}\right)^{2}+\lambda \sigma^{2} \sum_{k=1}^{N} \tau x_{k}^{2}
+    \frac{\partial \theta^{(2)}}{\partial t}+\frac{\sigma^{2}}{2} \cdot \frac{\partial^{2} \theta^{(2)}}{\partial S_{t}^{2}}-\gamma \sigma^{2} \cdot\left(\frac{\partial \theta^{(1)}}{\partial S_{t}}\right)^{2}=0 with\, boundary\, \theta^{(2)}\left(T, S_{T}\right)=0
     $$
+    \item Noting that $\theta^{(1)}\left(t, S_{t}\right)=S_{t}$, we solve this $\mathrm{PDE}$ as:
+    \[
+    \theta^{(2)}\left(t, S_{t}\right)=-\gamma \sigma^{2}(T-t) \tag{19}
+    \]
 \end{itemize}
 
-\subsection{Optimization (2)}
-
-\textbf{Derivation}
-
 \begin{itemize} 
-    \item For $j=1, \ldots, N-1$,
+    \item Finally, we collect the terms devoid of $I_{t}$
     $$
-    \frac{\partial U}{\partial x_{j}}=2 \tau\left(\lambda \sigma^{2} x_{j}-\tilde{\eta} \frac{\left(x_{j-1}-2 x_{j}+x_{j+1}\right)}{\tau^{2}}\right)
+    \frac{\partial \theta^{(0)}}{\partial t}+\frac{c}{k+\gamma}\left(2-\frac{2 k}{\gamma} \ln \left(1+\frac{\gamma}{k}\right)+k \cdot \theta^{(2)}\right)=0 \text { with boundary } \theta^{(0)}(T)=0
     $$
-    \item Therefore
-    $$
-    \frac{\partial U}{\partial x_{j}}=0 \Leftrightarrow \frac{\left(x_{j-1}-2 x_{j}+x_{j+1}\right)}{\tau^{2}}=\tilde{K} x_{j}
-    $$
-    with $\tilde{K}=\lambda \sigma^{2} / \tilde{\eta}$.    
+    \item Noting that $\theta^{(2)}\left(t, S_{t}\right)=-\gamma \sigma^{2}(T-t)$, we solve as:
+    \[
+    \theta^{(0)}(t)=\frac{c}{k+\gamma}\left(\left(2-\frac{2 k}{\gamma} \ln \left(1+\frac{\gamma}{k}\right)\right)(T-t)-\frac{k \gamma \sigma^{2}}{2}(T-t)^{2}\right) \tag{20}
+    \]
+    \item This completes the PDE solution for $\theta\left(t, S_{t}, l_{t}\right)$ and hence, for $V^{*}\left(t, S_{t}, W_{t}, l_{t}\right)$
+    \item Lastly, we derive formulas for $Q_{t}^{(b)}, Q_{t}^{(a)}, Q_{t}^{(m)}, \delta_{t}^{(b)^{*}}, \delta_{t}^{(a)^{*}}$
 \end{itemize}
 
-\subsection{Optimization (3)}
-
-\textbf{Solution}
+\subsection{Formulas for Prices and Spreads}
 
 \begin{itemize} 
-    \item It is shown that the solution can be written $x_{0}=X$ and for $j=1, \ldots, N:$
-    $$
+    \item Using equations (4) and (5), we get:
+    \[
     \begin{array}{l}
-    x_{j}=\frac{\sinh \left(K\left(T-t_{j}\right)\right)}{\sinh (K T)} X \\
-    n_{j}=\frac{2 \sinh (K \tau / 2)}{\sinh (K T)} \cosh (K(T-j \tau+\tau / 2))
+    Q_{t}^{(b)}=\theta^{(1)}\left(t, S_{t}\right)+\left(2 I_{t}+1\right) \cdot \theta^{(2)}\left(t, S_{t}\right)=S_{t}-\left(2 I_{t}+1\right) \frac{\gamma \sigma^{2}(T-t)}{2} \tag{21,22} \\
+    Q_{t}^{(a)}=\theta^{(1)}\left(t, S_{t}\right)+\left(2 I_{t}-1\right) \cdot \theta^{(2)}\left(t, S_{t}\right)=S_{t}-\left(2 I_{t}-1\right) \frac{\gamma \sigma^{2}(T-t)}{2}
     \end{array}
-    $$
-    where $K$ satisfies $\frac{2}{\tau^{2}}(\cosh (K \tau)-1)=\tilde{K}$
-    \item If $\lambda=0$, then $\tilde{K}=K=0$ and so $n_{j}=\tau / T=X / N$. We retrieve the strategy with minimal expected cost.
+    \]
+    \item Using equations $(11)$ and $(12)$, we get:
+    \[
+    \delta_{t}^{(b)^{*}}=\frac{\left(2 I_{t}+1\right) \gamma \sigma^{2}(T-t)}{2}+\frac{1}{\gamma} \ln \left(1+\frac{\gamma}{k}\right) \tag{23}
+    \]
+    \[
+    \delta_{t}^{(a)^{*}}=\frac{\left(1-2 I_{t}\right) \gamma \sigma^{2}(T-t)}{2}+\frac{1}{\gamma} \ln \left(1+\frac{\gamma}{k}\right) \tag{24}
+    \]
+    \item Optimal Bid-Ask Spread \[\delta_{t}^{(b)^{*}}+\delta_{t}^{(a)^{*}}=\gamma \sigma^{2}(T-t)+\frac{2}{\gamma} \ln \left(1+\frac{\gamma}{k}\right) \tag{25} \]
+    \[
+    \text { Optimal "Mid" } Q_{t}^{(m)}=\frac{Q_{t}^{(b)}+Q_{t}^{(a)}}{2}=\frac{P_{t}^{(b)^{*}}+P_{t}^{(a)^{*}}}{2}=S_{t}-I_{t} \gamma \sigma^{2}(T-t) \tag{26}
+    \]
 \end{itemize}
 
-\subsection{Remarks on this approach}
-
-\textbf{Remarks}
+\section{Summary}
 
 \begin{itemize} 
-    \item It is easy to show that the solution is time homogenous: if we compute the optimal strategy in $t_{k}$, we obtain the value between $t_{k}$ and $T$ of the optimal strategy computed in $t_{0}$.
-    \item In this approach, we obtain an efficient frontier of trading.
-    \item The optimal trajectories are very sensitive to the volatility parameter. It is therefore important to obtain accurate volatility estimates.
-    \item The Almgren and Chriss framework can be extended in dimension $n$ (if we sell several assets). In that case, correlation parameters come into the picture.
+    \item Think of $Q_{t}^{(m)}$ as inventory-risk-adjusted mid-price (adjustment to $\left.S_{t}\right)$
+    \item If market-maker is long inventory $\left(I_{t}>0\right), Q_{t}^{(m)}<S_{t}$ indicating inclination to sell than buy, and if market-maker is short inventory, $Q_{t}^{(m)}>S_{t}$ indicating inclination to buy than sell
+    \item Think of $\left[P_{t}^{(b)^{*}}, P_{t}^{(a)^{*}}\right]$ as "centered" at $Q_{t}^{(m)}$ (rather than at $\left.S_{t}\right)$,
+    i.e., $\left[P_{t}^{(b)^{*}}, P_{t}^{(a)^{*}}\right]$ will (together) move up/down in tandem with $Q_{t}^{(m)}$ moving up/down (as a function of inventory position $\left.I_{t}\right)$
+    \item Note from equation (25) that the Optimal Bid-Ask Spread $P_{t}^{(a)^{*}}-P_{t}^{(b)^{*}}$ is independent of inventory $I_{t}$
+    \item Useful view: $P_{t}^{(b)^{*}}<Q_{t}^{(b)}<Q_{t}^{(m)}<Q_{t}^{(a)}<P_{t}^{(a)^{*}}$, with these spreads:
+    \begin{itemize} 
+        \item Outer Spreads $P_{t}^{(a)^{*}}-Q_{t}^{(a)}=Q_{t}^{(b)}-P_{t}^{(b)^{*}}=\frac{1}{\gamma} \ln \left(1+\frac{\gamma}{k}\right)$
+        \item Inner Spreads $Q_{t}^{(a)}-Q_{t}^{(m)}=Q_{t}^{(m)}-Q_{t}^{(b)}=\frac{\gamma \sigma^{2}(T-t)}{2}$
+    \end{itemize}
 \end{itemize}
 
-\subsection{Results}
-
-\textbf{Optimal Trajectory for a Single-Asset Portfolio}
-
-\begin{center} 
-    \begin{figure}[hbt!]
-        \captionsetup{justification=centering,margin=0.5cm}
-        \includegraphics[width=13cm,height=4cm,keepaspectratio,]{op1.png}
-        \centering
-        \caption[caption]{Optimal trajectories. The trajectories corresponding to the points shown in Figure 1. (A) $\lambda=2 \times 10^{-6},\left(\right.$ B) $\lambda=0,\left(\right.$ C) $\lambda=-2 \times 10^{-7}$.
-        \cite[p.18]{Almgren_optimalexecution}}
-    \end{figure}
-\end{center}
-
-\textbf{Optimal Trajectories for the liquidation of a Two-Asset Portfolio}
-
-\begin{center} 
-    \begin{figure}[hbt!]
-        \captionsetup{justification=centering,margin=0.5cm}
-        \includegraphics[width=13cm,height=4cm,keepaspectratio,]{op2.png}
-        \centering
-        \caption[caption]{Optimal trajectories for two securities. As in Figure 5 , for (A) $\lambda=2 \times 10^{-6},(\mathrm{~B})$ the naïve strategy with $\lambda=0,(\mathrm{C}) \lambda=-5 \times 10^{-8}$.
-        \cite[p.41]{Almgren_optimalexecution}}
-    \end{figure}
-\end{center}
 
 \bibliographystyle{abbrv}           
 \bibliography{./myref.bib}
